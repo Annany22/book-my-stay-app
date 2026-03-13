@@ -1,5 +1,8 @@
 import java.util.HashMap;
+import java.util.Queue;
+import java.util.LinkedList;
 
+// ------------------- ROOM DOMAIN -------------------
 abstract class Room {
 
     private String type;
@@ -26,38 +29,34 @@ abstract class Room {
     }
 }
 
-// Single Room
 class SingleRoom extends Room {
     public SingleRoom() {
         super("Single", 1, 200, 80);
     }
 }
 
-// Double Room
 class DoubleRoom extends Room {
     public DoubleRoom() {
         super("Double", 2, 350, 120);
     }
 }
 
-// Suite Room
 class SuiteRoom extends Room {
     public SuiteRoom() {
         super("Suite", 3, 600, 250);
     }
 }
 
-// Inventory Class
+// ------------------- INVENTORY (STATE HOLDER) -------------------
 class RoomInventory {
 
     private HashMap<String, Integer> inventory;
 
     public RoomInventory() {
         inventory = new HashMap<>();
-
         inventory.put("Single", 10);
         inventory.put("Double", 5);
-        inventory.put("Suite", 0);
+        inventory.put("Suite", 2);
     }
 
     public int getAvailability(String roomType) {
@@ -65,48 +64,83 @@ class RoomInventory {
     }
 }
 
-// Search Service
-class SearchService {
+// ------------------- RESERVATION -------------------
+class Reservation {
 
-    private RoomInventory inventory;
+    private String guestName;
+    private String roomType;
 
-    public SearchService(RoomInventory inventory) {
-        this.inventory = inventory;
+    public Reservation(String guestName, String roomType) {
+        this.guestName = guestName;
+        this.roomType = roomType;
     }
 
-    public void searchAvailableRooms(Room[] rooms) {
+    public String getGuestName() {
+        return guestName;
+    }
 
-        System.out.println("Available Rooms:\n");
-        System.out.println("-----------------------------");
+    public String getRoomType() {
+        return roomType;
+    }
 
-        for (Room room : rooms) {
+    public void displayRequest() {
+        System.out.println("Guest: " + guestName + " requested " + roomType + " room");
+    }
+}
 
-            int available = inventory.getAvailability(room.getType());
+// ------------------- BOOKING REQUEST QUEUE -------------------
+class BookingRequestQueue {
 
-            if (available > 0) {
-                room.displayDetails();
-                System.out.println("Available: " + available);
-                System.out.println("---------------------");
-            }
+    private Queue<Reservation> queue;
+
+    public BookingRequestQueue() {
+        queue = new LinkedList<>();
+    }
+
+    // Accept booking request
+    public void addRequest(Reservation reservation) {
+        queue.add(reservation);
+        System.out.println("Request added to queue: " + reservation.getGuestName());
+    }
+
+    // Display queued requests (FIFO order)
+    public void displayQueue() {
+        System.out.println("\nBooking Request Queue (FIFO Order):");
+
+        for (Reservation r : queue) {
+            r.displayRequest();
         }
     }
 }
 
-// Main Class
+// ------------------- MAIN APPLICATION -------------------
 public class bookmystayapp {
 
     public static void main(String[] args) {
 
+        // Room objects
         Room single = new SingleRoom();
         Room doubleRoom = new DoubleRoom();
         Room suite = new SuiteRoom();
 
-        Room[] rooms = {single, doubleRoom, suite};
-
+        // Inventory (not modified here)
         RoomInventory inventory = new RoomInventory();
 
-        SearchService searchService = new SearchService(inventory);
+        // Booking request queue
+        BookingRequestQueue bookingQueue = new BookingRequestQueue();
 
-        searchService.searchAvailableRooms(rooms);
+        // Guests submit booking requests
+        Reservation r1 = new Reservation("Alice", "Single");
+        Reservation r2 = new Reservation("Bob", "Double");
+        Reservation r3 = new Reservation("Charlie", "Suite");
+
+        bookingQueue.addRequest(r1);
+        bookingQueue.addRequest(r2);
+        bookingQueue.addRequest(r3);
+
+        // Display queue order
+        bookingQueue.displayQueue();
+
+        // Note: No inventory updates or room allocations here
     }
 }
