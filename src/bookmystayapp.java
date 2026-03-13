@@ -77,6 +77,7 @@ class SearchService {
     public void searchAvailableRooms(Room[] rooms) {
 
         System.out.println("Available Rooms:\n");
+        System.out.println("-----------------------------");
 
         for (Room room : rooms) {
 
