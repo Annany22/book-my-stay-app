@@ -1,137 +1,92 @@
 import java.util.*;
 
-// Custom Exception
-class InvalidCancellationException extends Exception {
-    public InvalidCancellationException(String message) {
-        super(message);
-    }
-}
+// Booking Request (Represents input from guest)
+class BookingRequest {
+    String reservationId;
+    String guestName;
+    String roomType;
 
-// Reservation class
-class Reservation {
-    private String reservationId;
-    private String guestName;
-    private String roomType;
-
-    public Reservation(String reservationId, String guestName, String roomType) {
+    public BookingRequest(String reservationId, String guestName, String roomType) {
         this.reservationId = reservationId;
         this.guestName = guestName;
         this.roomType = roomType;
     }
-
-    public String getReservationId() {
-        return reservationId;
-    }
-
-    public String getGuestName() {
-        return guestName;
-    }
-
-    public String getRoomType() {
-        return roomType;
-    }
-
-    @Override
-    public String toString() {
-        return reservationId + " | " + guestName + " | " + roomType;
-    }
 }
 
-// Booking Service (handles booking + cancellation)
-class BookingService {
+// Thread-safe Booking System
+class ConcurrentBookingProcessor {
 
-    private Map<String, Integer> inventory;
-    private Map<String, Reservation> activeBookings;
-    private List<Reservation> bookingHistory;
+    private Map<String, Integer> inventory = new HashMap<>();
+    private Queue<BookingRequest> bookingQueue = new LinkedList<>();
 
-    // Stack for rollback (LIFO)
-    private Stack<String> rollbackStack;
-
-    public BookingService() {
-        inventory = new HashMap<>();
-        activeBookings = new HashMap<>();
-        bookingHistory = new ArrayList<>();
-        rollbackStack = new Stack<>();
-
+    public ConcurrentBookingProcessor() {
         // Initialize inventory
         inventory.put("Standard", 2);
         inventory.put("Deluxe", 1);
     }
 
-    // Create Booking
-    public void createBooking(String reservationId, String guestName, String roomType) {
-
-        if (!inventory.containsKey(roomType) || inventory.get(roomType) <= 0) {
-            System.out.println("Booking failed: Room not available.");
-            return;
-        }
-
-        // Allocate room (simulate room ID)
-        String roomId = roomType + "-" + inventory.get(roomType);
-
-        // Reduce inventory
-        inventory.put(roomType, inventory.get(roomType) - 1);
-
-        Reservation reservation = new Reservation(reservationId, guestName, roomType);
-
-        activeBookings.put(reservationId, reservation);
-        bookingHistory.add(reservation);
-
-        System.out.println("Booking confirmed: " + reservation + " | Room ID: " + roomId);
+    // Add booking request (Producer)
+    public synchronized void addRequest(BookingRequest request) {
+        bookingQueue.add(request);
+        System.out.println("Request added: " + request.reservationId + " (" + request.roomType + ")");
     }
 
-    // Cancel Booking (Rollback logic)
-    public void cancelBooking(String reservationId) {
+    // Process booking request (Consumer)
+    public void processRequest() {
+        while (true) {
+            BookingRequest request;
 
-        try {
-            // Validate existence
-            if (!activeBookings.containsKey(reservationId)) {
-                throw new InvalidCancellationException("Reservation not found or already cancelled.");
+            // Critical section: safely fetch request
+            synchronized (this) {
+                if (bookingQueue.isEmpty()) {
+                    return;
+                }
+                request = bookingQueue.poll();
             }
 
-            Reservation reservation = activeBookings.get(reservationId);
+            // Critical section: inventory update
+            synchronized (this) {
+                if (inventory.containsKey(request.roomType) &&
+                        inventory.get(request.roomType) > 0) {
 
-            // Step 1: Push to rollback stack
-            rollbackStack.push(reservation.getReservationId());
+                    // Allocate room
+                    inventory.put(request.roomType,
+                            inventory.get(request.roomType) - 1);
 
-            // Step 2: Restore inventory
-            String roomType = reservation.getRoomType();
-            inventory.put(roomType, inventory.get(roomType) + 1);
+                    System.out.println(Thread.currentThread().getName() +
+                            " processed booking: " + request.reservationId +
+                            " | " + request.roomType);
 
-            // Step 3: Remove from active bookings
-            activeBookings.remove(reservationId);
-
-            System.out.println("Cancellation successful for Reservation ID: " + reservationId);
-
-        } catch (InvalidCancellationException e) {
-            System.out.println("Cancellation failed: " + e.getMessage());
+                } else {
+                    System.out.println(Thread.currentThread().getName() +
+                            " failed booking: " + request.reservationId +
+                            " | No availability");
+                }
+            }
         }
     }
 
-    // Display Inventory
     public void displayInventory() {
-        System.out.println("\nCurrent Inventory:");
+        System.out.println("\nFinal Inventory:");
         for (Map.Entry<String, Integer> entry : inventory.entrySet()) {
             System.out.println(entry.getKey() + " -> " + entry.getValue());
         }
     }
+}
 
-    // Display Active Bookings
-    public void displayActiveBookings() {
-        System.out.println("\nActive Bookings:");
-        if (activeBookings.isEmpty()) {
-            System.out.println("No active bookings.");
-            return;
-        }
+// Worker Thread
+class BookingWorker extends Thread {
 
-        for (Reservation r : activeBookings.values()) {
-            System.out.println(r);
-        }
+    private ConcurrentBookingProcessor processor;
+
+    public BookingWorker(ConcurrentBookingProcessor processor, String name) {
+        super(name);
+        this.processor = processor;
     }
 
-    // Display Rollback Stack
-    public void displayRollbackStack() {
-        System.out.println("\nRollback Stack (Recent Cancellations): " + rollbackStack);
+    @Override
+    public void run() {
+        processor.processRequest();
     }
 }
 
@@ -140,24 +95,34 @@ public class bookmystayapp {
 
     public static void main(String[] args) {
 
-        BookingService service = new BookingService();
+        ConcurrentBookingProcessor processor = new ConcurrentBookingProcessor();
 
-        // Create bookings
-        service.createBooking("RES101", "Rahul", "Standard");
-        service.createBooking("RES102", "Anita", "Deluxe");
+        // Simulate multiple guest requests
+        processor.addRequest(new BookingRequest("RES101", "Rahul", "Standard"));
+        processor.addRequest(new BookingRequest("RES102", "Anita", "Deluxe"));
+        processor.addRequest(new BookingRequest("RES103", "Vikram", "Standard"));
+        processor.addRequest(new BookingRequest("RES104", "Neha", "Standard")); // extra request
 
-        // Attempt cancellation
-        service.cancelBooking("RES101");
+        // Create multiple threads (simulating concurrent users)
+        Thread t1 = new BookingWorker(processor, "Thread-1");
+        Thread t2 = new BookingWorker(processor, "Thread-2");
+        Thread t3 = new BookingWorker(processor, "Thread-3");
 
-        // Invalid cancellation
-        service.cancelBooking("RES999");
+        // Start threads
+        t1.start();
+        t2.start();
+        t3.start();
 
-        // Duplicate cancellation
-        service.cancelBooking("RES101");
+        // Wait for threads to finish
+        try {
+            t1.join();
+            t2.join();
+            t3.join();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
 
-        // Display system state
-        service.displayActiveBookings();
-        service.displayInventory();
-        service.displayRollbackStack();
+        // Final system state
+        processor.displayInventory();
     }
 }
